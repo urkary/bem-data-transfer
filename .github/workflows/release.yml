@@ -1,0 +1,63 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: bem-data-transfer-windows.exe
+            pyinstaller_args: --onefile --windowed --name bem-data-transfer-windows
+          - os: macos-latest
+            artifact: bem-data-transfer-macos
+            pyinstaller_args: --onefile --windowed --name bem-data-transfer-macos
+          - os: ubuntu-latest
+            artifact: bem-data-transfer-linux
+            pyinstaller_args: --onefile --name bem-data-transfer-linux
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
+      - name: Install tkinter (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y python3-tk
+
+      - name: Build executable
+        run: pyinstaller ${{ matrix.pyinstaller_args }} bem_transfer.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/${{ matrix.artifact }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: true
+          files: dist/*
