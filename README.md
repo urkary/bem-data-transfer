@@ -45,7 +45,7 @@ Combines the content of two Vital Bracelet BEM card dumps into a single `.bin` f
 
 - Vital Bracelet BE BEM cards (4 MB `.bin` dumps)
 - Tested combinations:
-  - Demon Slayer DS01 ↔ DS02
+  - Demon Slayer DS01 data → DS02 DIM physical card
   - My Hero Academia MHA01 data → Tokyo Revengers TR01 physical card
 
 ---
