@@ -4,6 +4,16 @@ Combines the content of two Vital Bracelet BEM card dumps into a single `.bin` f
 
 ---
 
+## Usage
+
+1. **Data card** — select the `.bin` dump of the card whose content (characters, sprites, adventures) you want to use
+2. **OTP card** — select the `.bin` dump of the card whose OTP the physical card has
+3. The output filename is suggested automatically; change it if you want
+4. Click **Transfer**
+5. Flash the resulting `.bin` onto the physical card using an SPI flash programmer (e.g. CH341 or CH347 with AsProgrammer)
+
+---
+
 ## For end users — download and run
 
 ### Windows
@@ -49,16 +59,6 @@ pyinstaller --onefile bem_transfer.py
 ```
 
 The executable will be at `dist/bem_transfer` (Linux/macOS) or `dist/bem_transfer.exe` (Windows).
-
----
-
-## Usage
-
-1. **Data card** — select the `.bin` dump of the card whose content (characters, sprites, adventures) you want to use
-2. **OTP card** — select the `.bin` dump of the card whose OTP the physical card has
-3. The output filename is suggested automatically; change it if you want
-4. Click **Transfer**
-5. Flash the resulting `.bin` onto the physical card using an SPI flash programmer (e.g. CH341 or CH347 with AsProgrammer)
 
 ---
 
