@@ -4,16 +4,6 @@ Combines the content of two Vital Bracelet BEM card dumps into a single `.bin` f
 
 ---
 
-## Usage
-
-1. **Data card** — select the `.bin` dump of the card whose content (characters, sprites, adventures) you want to use
-2. **OTP card** — select the `.bin` dump of the card whose OTP the physical card has
-3. The output filename is suggested automatically; change it if you want
-4. Click **Transfer**
-5. Flash the resulting `.bin` onto the physical card using an SPI flash programmer (e.g. CH341 or CH347 with AsProgrammer)
-
----
-
 ## For end users — download and run
 
 ### Windows
@@ -41,6 +31,25 @@ Combines the content of two Vital Bracelet BEM card dumps into a single `.bin` f
 
 ---
 
+## Usage
+
+1. **Data card** — select the `.bin` dump of the card whose content (characters, sprites, adventures) you want to use
+2. **OTP card** — select the `.bin` dump of the card whose OTP the physical card has
+3. The output filename is suggested automatically; change it if you want
+4. Click **Transfer**
+5. Flash the resulting `.bin` onto the physical card using an SPI flash programmer (e.g. CH341 or CH347 with AsProgrammer)
+
+---
+
+## Compatibility
+
+- Vital Bracelet BE BEM cards (4 MB `.bin` dumps)
+- Tested combinations:
+  - Demon Slayer DS01 ↔ DS02
+  - My Hero Academia MHA01 data → Tokyo Revengers TR01 physical card
+
+---
+
 ## For developers — run from source
 
 **Requirements:** Python 3.9 or newer. Tkinter is included with standard Python installations.
@@ -60,9 +69,3 @@ pyinstaller --onefile bem_transfer.py
 
 The executable will be at `dist/bem_transfer` (Linux/macOS) or `dist/bem_transfer.exe` (Windows).
 
----
-
-## Compatibility
-
-- Vital Bracelet BE BEM cards (4 MB `.bin` dumps)
-- Tested with Demon Slayer DS01 and DS02
