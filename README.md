@@ -43,29 +43,7 @@ Combines the content of two Vital Bracelet BEM card dumps into a single `.bin` f
 
 ## Compatibility
 
-- Vital Bracelet BE BEM cards (4 MB `.bin` dumps)
 - Tested combinations:
   - Demon Slayer DS01 data → DS02 DIM physical card
   - My Hero Academia MHA01 data → Tokyo Revengers TR01 physical card
-
----
-
-## For developers — run from source
-
-**Requirements:** Python 3.9 or newer. Tkinter is included with standard Python installations.
-
-```bash
-python3 bem_transfer.py
-```
-
-> **Note on WSL2:** The window may look unstyled when running under WSL2 due to X11 forwarding. Run natively on Windows/macOS/Linux for the best appearance.
-
-### Build a standalone executable
-
-```bash
-pip install pyinstaller
-pyinstaller --onefile bem_transfer.py
-```
-
-The executable will be at `dist/bem_transfer` (Linux/macOS) or `dist/bem_transfer.exe` (Windows).
 
