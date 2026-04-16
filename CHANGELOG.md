@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.0] — 2026-04-16
 
 ### Fixed
 - **Corrupt pixels in transferred cards.** v0.1.0 always placed the 2-byte
