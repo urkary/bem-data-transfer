@@ -87,16 +87,21 @@ def place_sprites(output: bytearray, sprites: list, n_sprites: int) -> tuple:
     Place sprites in the output, choosing positions so the 2-byte corrector for each
     chunk's checksum area never overlaps with sprite pixel data.
 
-    Pool selection rules (smallest fitting sprite wins in every case):
-      Rama A  (write_pos >= area_end):   write smallest sprite
-      Rama B  (write_pos inside area):   write smallest that fits before area_end;
-                                         if none fits, skip to area_end
-      Rama C  (write_pos < area_start, corrector not yet placed):
-        Case i  — smallest where end lands inside [area_start, area_end):
-                  write it, place corrector just after it, advance by size+2
-        Case ii — smallest that fits entirely before area_start: write it, advance
-        Case iii— all sprites overflow area_end: place corrector at bytes 0-1 (default),
-                  jump write_pos to area_start+2
+    A single state variable `next_unhandled` tracks the next chunk whose corrector
+    position has not yet been committed.  At each iteration the pool is evaluated
+    against the area of `next_unhandled` (smallest-fitting sprite wins in every case):
+
+      Case i  — smallest sprite whose end lands inside [area_start, area_end):
+                write it; corrector placed immediately after its last pixel.
+                next_unhandled advances.
+      Case ii — smallest sprite ending entirely before area_start:
+                write it; area decision deferred to the next iteration.
+      Case iii— all remaining sprites end past area_end:
+                corrector stays at the default position (bytes 0-1 of the area);
+                write_pos jumps to area_start+2; next_unhandled advances.
+
+    Once an area's corrector is committed its bytes are treated as ordinary
+    writable space; write_pos advances through them freely.
 
     Returns (new_ptrs, corrector_pos, end_ptr).
     """
@@ -107,7 +112,7 @@ def place_sprites(output: bytearray, sprites: list, n_sprites: int) -> tuple:
     new_ptrs = [0] * n_sprites
     # Default corrector position: bytes 0-1 of each area
     corrector_pos = [pkg + c * CHUNK_SIZE + CHECKSUM_AREA_OFFSET for c in range(NUM_CHUNKS)]
-    corrector_set = [False] * NUM_CHUNKS
+    next_unhandled = 0   # index of next chunk whose corrector is not yet committed
 
     def _check_overflow(idx: int, size: int) -> None:
         if write_pos + size > SPRITE_PKG_END:
@@ -123,123 +128,58 @@ def place_sprites(output: bytearray, sprites: list, n_sprites: int) -> tuple:
             raise ValueError(f"Sprite data overflow at sprite {idx}")
 
     while pool:
-        rel = write_pos - pkg
-        chunk_idx = rel // CHUNK_SIZE
+        # Advance past any areas whose end write_pos has already passed.
+        # Those areas keep their default corrector position (safe: write_pos only
+        # moves forward, so nothing will be written before their area_start).
+        while next_unhandled < NUM_CHUNKS:
+            area_end_probe = pkg + next_unhandled * CHUNK_SIZE + CHECKSUM_AREA_OFFSET + CHECKSUM_AREA_SIZE
+            if write_pos >= area_end_probe:
+                next_unhandled += 1
+            else:
+                break
 
-        if chunk_idx >= NUM_CHUNKS:
-            idx, size, _ = pool[0]
-            data_start = pkg + PTR_TABLE_OFFSET + (n_sprites + 1) * 4
-            logging.error(
-                "Sprite overflow: sprite %d still unplaced, write_pos=0x%X exceeds "
-                "sprite package (used=%d bytes, capacity=%d bytes)",
-                idx, write_pos, write_pos - data_start, SPRITE_PKG_END - data_start,
-            )
-            raise ValueError(f"Sprite data overflow: write_pos=0x{write_pos:X}")
-
-        area_start = pkg + chunk_idx * CHUNK_SIZE + CHECKSUM_AREA_OFFSET
-        area_end   = area_start + CHECKSUM_AREA_SIZE
-
-        if write_pos >= area_end:
-            # ── Rama A ──────────────────────────────────────────────────────────
-            # Before writing, check prospectively for the next chunk's area:
-            # a sprite written here may span into it, causing corrector overlap.
-            next_chunk_idx = chunk_idx + 1
-            if next_chunk_idx < NUM_CHUNKS and not corrector_set[next_chunk_idx]:
-                next_area_start = pkg + next_chunk_idx * CHUNK_SIZE + CHECKSUM_AREA_OFFSET
-                next_area_end   = next_area_start + CHECKSUM_AREA_SIZE
-
-                # Case i: smallest crossing next_area_start but ending before next_area_end
-                case_i = next((j for j, (_, sz, _) in enumerate(pool)
-                               if write_pos + sz > next_area_start
-                               and write_pos + sz <= next_area_end), None)
-                if case_i is not None:
-                    idx, size, pixels = pool.pop(case_i)
-                    _check_overflow(idx, size)
-                    output[write_pos:write_pos + size] = pixels
-                    new_ptrs[idx] = write_pos - pkg
-                    corrector_pos[next_chunk_idx] = write_pos + size
-                    corrector_set[next_chunk_idx] = True
-                    write_pos += size + 2
-                    continue
-
-                # Case ii: smallest fitting entirely before next_area_start
-                case_ii = next((j for j, (_, sz, _) in enumerate(pool)
-                                if write_pos + sz <= next_area_start), None)
-                if case_ii is not None:
-                    idx, size, pixels = pool.pop(case_ii)
-                    _check_overflow(idx, size)
-                    output[write_pos:write_pos + size] = pixels
-                    new_ptrs[idx] = write_pos - pkg
-                    write_pos += size
-                    continue
-
-                # Case iii: all remaining sprites overflow next_area_end
-                corrector_set[next_chunk_idx] = True
-                write_pos = next_area_start + 2
-                continue
-
-            # No prospective area concern — write smallest sprite
+        if next_unhandled >= NUM_CHUNKS:
+            # All areas resolved — write sprites straight through.
             idx, size, pixels = pool[0]
             _check_overflow(idx, size)
             output[write_pos:write_pos + size] = pixels
             new_ptrs[idx] = write_pos - pkg
             write_pos += size
             pool.pop(0)
+            continue
 
-        elif write_pos >= area_start:
-            # ── Rama B ──────────────────────────────────────────────────────────
-            found = next((j for j, (_, sz, _) in enumerate(pool)
-                          if write_pos + sz <= area_end), None)
-            if found is not None:
-                idx, size, pixels = pool.pop(found)
-                output[write_pos:write_pos + size] = pixels
-                new_ptrs[idx] = write_pos - pkg
-                write_pos += size
-            else:
-                write_pos = area_end
+        area_start = pkg + next_unhandled * CHUNK_SIZE + CHECKSUM_AREA_OFFSET
+        area_end   = area_start + CHECKSUM_AREA_SIZE
 
-        else:
-            # ── Rama C ──────────────────────────────────────────────────────────
-            if not corrector_set[chunk_idx]:
-                # Case i: smallest sprite crossing area_start but ending before area_end
-                case_i = next((j for j, (_, sz, _) in enumerate(pool)
-                               if write_pos + sz > area_start
-                               and write_pos + sz <= area_end), None)
-                if case_i is not None:
-                    idx, size, pixels = pool.pop(case_i)
-                    _check_overflow(idx, size)
-                    output[write_pos:write_pos + size] = pixels
-                    new_ptrs[idx] = write_pos - pkg
-                    corrector_pos[chunk_idx] = write_pos + size
-                    corrector_set[chunk_idx] = True
-                    write_pos += size + 2
-                    continue
+        # Case i: smallest sprite ending inside [area_start, area_end)
+        case_i = next((j for j, (_, sz, _) in enumerate(pool)
+                       if write_pos + sz > area_start
+                       and write_pos + sz <= area_end), None)
+        if case_i is not None:
+            idx, size, pixels = pool.pop(case_i)
+            _check_overflow(idx, size)
+            output[write_pos:write_pos + size] = pixels
+            new_ptrs[idx] = write_pos - pkg
+            corrector_pos[next_unhandled] = write_pos + size
+            write_pos += size + 2
+            next_unhandled += 1
+            continue
 
-                # Case ii: smallest sprite that fits entirely before area_start
-                case_ii = next((j for j, (_, sz, _) in enumerate(pool)
-                                if write_pos + sz <= area_start), None)
-                if case_ii is not None:
-                    idx, size, pixels = pool.pop(case_ii)
-                    _check_overflow(idx, size)
-                    output[write_pos:write_pos + size] = pixels
-                    new_ptrs[idx] = write_pos - pkg
-                    write_pos += size
-                    continue
+        # Case ii: smallest sprite ending entirely before area_start
+        case_ii = next((j for j, (_, sz, _) in enumerate(pool)
+                        if write_pos + sz <= area_start), None)
+        if case_ii is not None:
+            idx, size, pixels = pool.pop(case_ii)
+            _check_overflow(idx, size)
+            output[write_pos:write_pos + size] = pixels
+            new_ptrs[idx] = write_pos - pkg
+            write_pos += size
+            continue
 
-                # Case iii: all remaining sprites overflow area_end
-                # corrector stays at default (area_start, bytes 0-1)
-                corrector_set[chunk_idx] = True
-                write_pos = area_start + 2
-                # next iteration: Rama B
-
-            else:
-                # Corrector already set but still before area_start — write smallest
-                idx, size, pixels = pool[0]
-                _check_overflow(idx, size)
-                output[write_pos:write_pos + size] = pixels
-                new_ptrs[idx] = write_pos - pkg
-                write_pos += size
-                pool.pop(0)
+        # Case iii: all remaining sprites end past area_end.
+        # Corrector stays at the default position (area_start, bytes 0-1).
+        write_pos = area_start + 2
+        next_unhandled += 1
 
     end_ptr = write_pos - pkg
 
