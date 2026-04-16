@@ -325,6 +325,9 @@ def check_capacity(path: str) -> dict:
     data = read_bin(path)
     n, ptrs, dims = read_sprite_metadata(data)
     sprites = extract_sprites(data, n, ptrs, dims)
+    # Naive: minimum bytes required if sprites were packed contiguously (no checksum-area gaps),
+    # including 2 corrector bytes per chunk that the algorithm must always place.
+    naive = sum(w * h * 2 for w, h in dims) + NUM_CHUNKS * 2
     scratch = bytearray(EXPECTED_SIZE)
     _, _, end_ptr = place_sprites(scratch, sprites, n)
     data_start = SPRITE_PACKAGE_START + PTR_TABLE_OFFSET + (n + 1) * 4
@@ -334,6 +337,7 @@ def check_capacity(path: str) -> dict:
         "name": card_name(data),
         "dim_id": dim_id(data),
         "n_sprites": n,
+        "naive": naive,
         "used": used,
         "capacity": capacity,
         "margin": capacity - used,
@@ -399,28 +403,32 @@ def _cli():
     elif args.cmd == "check":
         col_file = max(len(c) for c in args.cards)
         col_file = max(col_file, 4)
-        header = (f"{'FILE':<{col_file}}  {'NAME':<24}  {'dimId':<6}  "
-                  f"{'SPRITES':>7}  {'USED':>9}  {'CAPACITY':>9}  {'MARGIN':>9}  STATUS")
+        header = (f"{'FILE':<{col_file}}  {'dimId':<6}  "
+                  f"{'SPRITES':>7}  {'NAIVE':>9}  {'USED':>9}  {'WASTE':>7}  "
+                  f"{'CAPACITY':>9}  {'MARGIN':>9}  STATUS")
         print(header)
         print("-" * len(header))
         any_error = False
         for path in args.cards:
             try:
                 r = check_capacity(path)
+                naive_kb    = r["naive"]    // 1024
                 used_kb     = r["used"]     // 1024
+                waste_kb    = (r["used"] - r["naive"]) // 1024
                 capacity_kb = r["capacity"] // 1024
                 margin_kb   = r["margin"]   // 1024
                 status = "OK" if r["margin"] >= 0 else "OVERFLOW"
                 if r["margin"] < 0:
                     any_error = True
                 fname = os.path.basename(path)
-                print(f"{fname:<{col_file}}  {r['name']:<24}  0x{r['dim_id']:02X}    "
-                      f"{r['n_sprites']:>7}  {used_kb:>7} KB  {capacity_kb:>7} KB  "
+                print(f"{fname:<{col_file}}  0x{r['dim_id']:02X}    "
+                      f"{r['n_sprites']:>7}  {naive_kb:>7} KB  {used_kb:>7} KB  "
+                      f"{waste_kb:>5} KB  {capacity_kb:>7} KB  "
                       f"{margin_kb:>7} KB  {status}")
             except Exception as e:
                 any_error = True
                 fname = os.path.basename(path)
-                print(f"{fname:<{col_file}}  {'':24}  {'':6}  {'':7}  {'':9}  {'':9}  {'':9}  ERROR: {e}")
+                print(f"{fname:<{col_file}}  {'':6}  {'':7}  {'':9}  {'':9}  {'':7}  {'':9}  {'':9}  ERROR: {e}")
         if any_error:
             sys.exit(1)
 
