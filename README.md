@@ -41,6 +41,47 @@ Combines the content of two Vital Bracelet BEM card dumps into a single `.bin` f
 
 ---
 
+## Command-line usage
+
+When running from source (`python bem_transfer.py`) or from a terminal, you can pass subcommands instead of opening the GUI.
+
+### Transfer
+
+```
+python bem_transfer.py transfer --data_card <file> --target_card <file> [--output_card <file>]
+```
+
+- `--data_card` — card whose content (sprites, characters…) you want to use
+- `--target_card` — target physical card that provides the OTP signatures
+- `--output_card` — output path (optional; auto-generated next to the data card if omitted)
+
+### Card info
+
+```
+python bem_transfer.py info --card <file>
+```
+
+Prints card name, dimId, and sprite count.
+
+### Capacity check
+
+```
+python bem_transfer.py check <file> [file …]
+```
+
+Dry-runs the sprite placement for one or more cards and reports how much space
+is used and how much margin is left. Useful for verifying that all sprites fit
+correctly when accounting for checksum corrector placement. Exits with code 1
+if any card overflows.
+
+Example — check all cards in a folder:
+
+```
+python bem_transfer.py check path/to/cards/*.bin
+```
+
+---
+
 ## Compatibility
 
 - Tested combinations:
